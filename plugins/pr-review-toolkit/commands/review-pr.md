@@ -24,6 +24,7 @@ Run a comprehensive pull request review using multiple specialized agents, each 
    - **errors** - Check error handling for silent failures
    - **types** - Analyze type design and invariants (if new types added)
    - **code** - General code review for project guidelines
+   - **architecture** - Detect kludges, workarounds, and architectural smells
    - **simplify** - Simplify code for clarity and maintainability
    - **all** - Run all applicable reviews (default)
 
@@ -40,6 +41,7 @@ Run a comprehensive pull request review using multiple specialized agents, each 
    - **If comments/docs added**: comment-analyzer
    - **If error handling changed**: silent-failure-hunter
    - **If types added/modified**: type-design-analyzer
+   - **If non-trivial changes**: architecture-smell-detector (workarounds, kludges)
    - **After passing review**: code-simplifier (polish and refine)
 
 5. **Launch Review Agents**
@@ -102,6 +104,9 @@ Run a comprehensive pull request review using multiple specialized agents, each 
 /pr-review-toolkit:review-pr comments
 # Reviews only code comments
 
+/pr-review-toolkit:review-pr architecture
+# Checks for workarounds, kludges, and design smells
+
 /pr-review-toolkit:review-pr simplify
 # Simplifies code after passing review
 ```
@@ -138,6 +143,11 @@ Run a comprehensive pull request review using multiple specialized agents, each 
 - Checks CLAUDE.md compliance
 - Detects bugs and issues
 - Reviews general code quality
+
+**architecture-smell-detector**:
+- Identifies workarounds and kludges
+- Detects missing abstractions and coupling
+- Recommends refactor vs tactical fix
 
 **code-simplifier**:
 - Simplifies complex code
