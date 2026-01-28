@@ -1,10 +1,10 @@
 # PR Review Toolkit
 
-A comprehensive collection of specialized agents for thorough pull request review, covering code comments, test coverage, error handling, type design, code quality, and code simplification.
+A comprehensive collection of specialized agents for thorough pull request review, covering code comments, test coverage, error handling, type design, code quality, architecture smells, best practices research, and code simplification.
 
 ## Overview
 
-This plugin bundles 6 expert review agents that each focus on a specific aspect of code quality. Use them individually for targeted reviews or together for comprehensive PR analysis.
+This plugin bundles 8 expert review agents that each focus on a specific aspect of code quality. Use them individually for targeted reviews or together for comprehensive PR analysis.
 
 ## Agents
 
@@ -137,6 +137,55 @@ This plugin bundles 6 expert review agents that each focus on a specific aspect 
 
 **Note**: This agent preserves functionality while improving code structure and maintainability.
 
+### 7. architecture-smell-detector
+**Focus**: Architectural smells, workarounds, and kludges
+
+**Analyzes:**
+- Type system bypasses (`as any`, non-null assertions)
+- Special-case flags and escape hatches
+- Missing abstractions and code duplication
+- Coupling smells and circular dependencies
+- Root cause vs symptom fixes
+
+**When to use:**
+- When reviewing non-trivial changes
+- When code "feels hacky" or uses workarounds
+- When a fix touches many unrelated files
+
+**Triggers:**
+```
+"Is this the right approach?"
+"This feels hacky"
+"Check for architectural issues"
+"Review this workaround"
+```
+
+**Note**: Provides REFACTOR_NOW / REFACTOR_SOON / TACTICAL_OK recommendations.
+
+### 8. best-practices-analyzer
+**Focus**: Researching and applying current best practices for your stack
+
+**Analyzes:**
+- Current best practices for your specific situation
+- Code alignment with authoritative sources
+- Stack-specific conventions and patterns
+- Deviations from recommended approaches
+
+**When to use:**
+- When implementing patterns or technologies
+- When unsure if approach follows conventions
+- When reviewing stack-specific code
+
+**Triggers:**
+```
+"Is this the right way to do X?"
+"What's the best practice for Y?"
+"Am I handling Z correctly?"
+"Does this follow React/Next.js/etc conventions?"
+```
+
+**Note**: Unlike other agents, this one actively researches via WebSearch to find current authoritative recommendations rather than relying on memorized patterns.
+
 ## Usage Patterns
 
 ### Individual Agent Usage
@@ -208,6 +257,10 @@ Agents provide confidence scores for their findings:
 
 **code-simplifier**: Identifies complexity and suggests simplifications
 
+**architecture-smell-detector**: Confidence 70-100 with REFACTOR_NOW/SOON/TACTICAL_OK
+
+**best-practices-analyzer**: HIGH/MEDIUM/LOW severity with source citations
+
 ### Output Formats
 
 All agents provide structured, actionable output:
@@ -229,6 +282,8 @@ All agents provide structured, actionable output:
 - pr-test-analyzer (test coverage check)
 - comment-analyzer (if added/modified comments)
 - type-design-analyzer (if added/modified types)
+- architecture-smell-detector (if non-trivial changes)
+- best-practices-analyzer (if implementing patterns/technologies)
 - code-reviewer (final sweep)
 
 **After Passing Review:**
@@ -289,10 +344,12 @@ This plugin works great with:
 **Recommended workflow:**
 1. Write code → **code-reviewer**
 2. Fix issues → **silent-failure-hunter** (if error handling)
-3. Add tests → **pr-test-analyzer**
-4. Document → **comment-analyzer**
-5. Review passes → **code-simplifier** (polish)
-6. Create PR
+3. Check approach → **best-practices-analyzer** (if using specific patterns/tech)
+4. Check architecture → **architecture-smell-detector** (if non-trivial changes)
+5. Add tests → **pr-test-analyzer**
+6. Document → **comment-analyzer**
+7. Review passes → **code-simplifier** (polish)
+8. Create PR
 
 ## Contributing
 

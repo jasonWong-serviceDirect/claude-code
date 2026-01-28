@@ -25,6 +25,7 @@ Run a comprehensive pull request review using multiple specialized agents, each 
    - **types** - Analyze type design and invariants (if new types added)
    - **code** - General code review for project guidelines
    - **architecture** - Detect kludges, workarounds, and architectural smells
+   - **practices** - Research and apply current best practices for the situation
    - **simplify** - Simplify code for clarity and maintainability
    - **all** - Run all applicable reviews (default)
 
@@ -42,6 +43,7 @@ Run a comprehensive pull request review using multiple specialized agents, each 
    - **If error handling changed**: silent-failure-hunter
    - **If types added/modified**: type-design-analyzer
    - **If non-trivial changes**: architecture-smell-detector (workarounds, kludges)
+   - **If implementing patterns/technologies**: best-practices-analyzer (research current practices)
    - **After passing review**: code-simplifier (polish and refine)
 
 5. **Launch Review Agents**
@@ -107,6 +109,9 @@ Run a comprehensive pull request review using multiple specialized agents, each 
 /pr-review-toolkit:review-pr architecture
 # Checks for workarounds, kludges, and design smells
 
+/pr-review-toolkit:review-pr practices
+# Researches best practices for your stack/situation
+
 /pr-review-toolkit:review-pr simplify
 # Simplifies code after passing review
 ```
@@ -148,6 +153,11 @@ Run a comprehensive pull request review using multiple specialized agents, each 
 - Identifies workarounds and kludges
 - Detects missing abstractions and coupling
 - Recommends refactor vs tactical fix
+
+**best-practices-analyzer**:
+- Researches current best practices for your stack
+- Evaluates code against authoritative sources
+- Provides situation-specific recommendations
 
 **code-simplifier**:
 - Simplifies complex code
