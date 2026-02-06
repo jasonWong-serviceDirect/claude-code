@@ -36,15 +36,25 @@ Run a comprehensive pull request review using multiple specialized agents, each 
 
 4. **Determine Applicable Reviews**
 
-   Based on changes:
-   - **Always applicable**: code-reviewer (general quality)
-   - **If test files changed**: pr-test-analyzer
-   - **If comments/docs added**: comment-analyzer
-   - **If error handling changed**: silent-failure-hunter
-   - **If types added/modified**: type-design-analyzer
-   - **If non-trivial changes**: architecture-smell-detector (workarounds, kludges)
-   - **If implementing patterns/technologies**: best-practices-analyzer (research current practices)
-   - **After passing review**: code-simplifier (polish and refine)
+   **When "all" is specified or no specific aspects requested (default):** Launch ALL 8 agents unconditionally:
+   1. `code-reviewer`
+   2. `pr-test-analyzer`
+   3. `comment-analyzer`
+   4. `silent-failure-hunter`
+   5. `type-design-analyzer`
+   6. `architecture-smell-detector`
+   7. `best-practices-analyzer`
+   8. `code-simplifier`
+
+   **When specific aspects are requested** (e.g., `tests errors`): Only launch the named agents:
+   - `code` → `code-reviewer`
+   - `tests` → `pr-test-analyzer`
+   - `comments` → `comment-analyzer`
+   - `errors` → `silent-failure-hunter`
+   - `types` → `type-design-analyzer`
+   - `architecture` → `architecture-smell-detector`
+   - `practices` → `best-practices-analyzer`
+   - `simplify` → `code-simplifier`
 
 5. **Launch Review Agents**
 

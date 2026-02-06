@@ -1,10 +1,10 @@
 # PR Review Toolkit
 
-A comprehensive collection of specialized agents for thorough pull request review, covering code comments, test coverage, error handling, type design, code quality, architecture smells, best practices research, and code simplification.
+A comprehensive collection of specialized agents for thorough pull request review, covering code comments, test coverage, error handling, type design, code quality, architecture smells, best practices research, React performance patterns, web interface guidelines, and code simplification.
 
 ## Overview
 
-This plugin bundles 8 expert review agents that each focus on a specific aspect of code quality. Use them individually for targeted reviews or together for comprehensive PR analysis.
+This plugin bundles 10 expert review agents that each focus on a specific aspect of code quality. Use them individually for targeted reviews or together for comprehensive PR analysis.
 
 ## Agents
 
@@ -186,6 +186,60 @@ This plugin bundles 8 expert review agents that each focus on a specific aspect 
 
 **Note**: Unlike other agents, this one actively researches via WebSearch to find current authoritative recommendations rather than relying on memorized patterns.
 
+### 9. react-best-practices
+**Focus**: React performance patterns and anti-patterns
+
+**Analyzes:**
+- Waterfall patterns (sequential awaits)
+- Bundle size issues (barrel imports, missing lazy loading)
+- Re-render problems (stale closures, missing functional setState)
+- Data fetching patterns (missing deduplication)
+- Rendering performance (conditional render issues, missing transitions)
+
+**When to use:**
+- When reviewing React/TypeScript PRs
+- When investigating React performance issues
+- When refactoring React components
+
+**Triggers:**
+```
+"Check my React code for best practices"
+"Review React performance patterns"
+"Is this component optimized?"
+"Check for re-render issues"
+```
+
+**Note**: Based on Vercel Engineering guidelines adapted for Vite + React SPAs. Prioritizes issues by impact (CRITICAL > HIGH > MEDIUM > LOW).
+
+### 10. web-design-guidelines
+**Focus**: Web interface quality and accessibility
+
+**Analyzes:**
+- Accessibility (labels, aria, keyboard support, semantic HTML)
+- Focus states (visible indicators, outline handling)
+- Forms (autocomplete, types, error handling, labels)
+- Animation (reduced motion, transform/opacity only)
+- Typography (ellipsis, quotes, tabular nums)
+- Performance (virtualization, preconnect, font loading)
+- Anti-patterns (blocked zoom/paste, div onClick, missing dimensions)
+
+**When to use:**
+- When reviewing UI components
+- When checking accessibility compliance
+- When auditing UX patterns
+- Before finalizing frontend PRs
+
+**Triggers:**
+```
+"Review my UI"
+"Check accessibility"
+"Audit design patterns"
+"Review UX"
+"Check my site against best practices"
+```
+
+**Note**: Fetches latest guidelines from Vercel's web-interface-guidelines repo. Focuses on CRITICAL accessibility issues first.
+
 ## Usage Patterns
 
 ### Individual Agent Usage
@@ -261,6 +315,10 @@ Agents provide confidence scores for their findings:
 
 **best-practices-analyzer**: HIGH/MEDIUM/LOW severity with source citations
 
+**react-best-practices**: CRITICAL/HIGH/MEDIUM/LOW by impact (waterfalls, bundle size, re-renders)
+
+**web-design-guidelines**: CRITICAL/HIGH/MEDIUM/LOW (accessibility, focus, forms, animation)
+
 ### Output Formats
 
 All agents provide structured, actionable output:
@@ -284,6 +342,8 @@ All agents provide structured, actionable output:
 - type-design-analyzer (if added/modified types)
 - architecture-smell-detector (if non-trivial changes)
 - best-practices-analyzer (if implementing patterns/technologies)
+- react-best-practices (if React/TypeScript code)
+- web-design-guidelines (if UI components)
 - code-reviewer (final sweep)
 
 **After Passing Review:**
@@ -345,11 +405,13 @@ This plugin works great with:
 1. Write code → **code-reviewer**
 2. Fix issues → **silent-failure-hunter** (if error handling)
 3. Check approach → **best-practices-analyzer** (if using specific patterns/tech)
-4. Check architecture → **architecture-smell-detector** (if non-trivial changes)
-5. Add tests → **pr-test-analyzer**
-6. Document → **comment-analyzer**
-7. Review passes → **code-simplifier** (polish)
-8. Create PR
+4. Check React code → **react-best-practices** (if React/TypeScript)
+5. Check UI/UX → **web-design-guidelines** (if UI components)
+6. Check architecture → **architecture-smell-detector** (if non-trivial changes)
+7. Add tests → **pr-test-analyzer**
+8. Document → **comment-analyzer**
+9. Review passes → **code-simplifier** (polish)
+10. Create PR
 
 ## Contributing
 
