@@ -114,6 +114,17 @@
       "category": "development"
     },
     {
+      "name": "pr-review-team",
+      "description": "Team-based PR review using agent teams for parallel, coordinated code review across multiple specialized reviewers",
+      "version": "1.0.0",
+      "author": {
+        "name": "Jason",
+        "email": "jason@example.com"
+      },
+      "source": "./plugins/pr-review-team",
+      "category": "productivity"
+    },
+    {
       "name": "pr-review-toolkit",
       "description": "Comprehensive PR review agents specializing in comments, tests, error handling, type design, code quality, best practices research, and code simplification",
       "version": "1.0.0",
