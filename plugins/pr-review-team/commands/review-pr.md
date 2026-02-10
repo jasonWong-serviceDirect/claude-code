@@ -22,16 +22,16 @@ Run a comprehensive pull request review using an **agent team** where specialize
 
 ### 2. Available Review Aspects
 
-| Aspect | Teammate Name | Agent File |
+| Aspect | Teammate Name | Prompt File |
 |--------|--------------|------------|
-| `code` | code-reviewer | agents/code-reviewer.md |
-| `tests` | test-analyzer | agents/pr-test-analyzer.md |
-| `comments` | comment-analyzer | agents/comment-analyzer.md |
-| `errors` | failure-hunter | agents/silent-failure-hunter.md |
-| `types` | type-analyzer | agents/type-design-analyzer.md |
-| `architecture` | arch-detector | agents/architecture-smell-detector.md |
-| `practices` | practices-analyzer | agents/best-practices-analyzer.md |
-| `simplify` | code-simplifier | agents/code-simplifier.md |
+| `code` | code-reviewer | prompts/code-reviewer.md |
+| `tests` | test-analyzer | prompts/pr-test-analyzer.md |
+| `comments` | comment-analyzer | prompts/comment-analyzer.md |
+| `errors` | failure-hunter | prompts/silent-failure-hunter.md |
+| `types` | type-analyzer | prompts/type-design-analyzer.md |
+| `architecture` | arch-detector | prompts/architecture-smell-detector.md |
+| `practices` | practices-analyzer | prompts/best-practices-analyzer.md |
+| `simplify` | code-simplifier | prompts/code-simplifier.md |
 | `all` | All of the above | (default) |
 
 ### 3. Create the Review Team
@@ -69,7 +69,7 @@ Task(
 
 **Composing teammate prompts:** For each teammate, build a prompt with these three sections:
 
-**Section 1 - Expertise:** Read the corresponding agent file from this plugin's `agents/` directory (paths listed in the table above). Include the agent's full expertise content (everything below the YAML frontmatter) as the teammate's domain knowledge.
+**Section 1 - Expertise:** Read the corresponding prompt file from this plugin's `prompts/` directory (paths listed in the table above). Include the full expertise content (everything below the YAML frontmatter) as the teammate's domain knowledge.
 
 **Section 2 - Scope:** Include:
 - The list of changed files from git diff
@@ -190,5 +190,5 @@ After presenting the report:
 - Each teammate works independently with its own context window
 - Teammates report findings via direct messages to the team lead
 - The team lead (you) synthesizes all findings into a unified report
-- Agent expertise files in `agents/` can also be used individually as subagents
+- Expertise files in `prompts/` are only loaded when this command is invoked, keeping context free in other conversations
 - Team coordination adds some overhead vs subagents - use this when you want parallel execution and the ability for reviewers to work independently
