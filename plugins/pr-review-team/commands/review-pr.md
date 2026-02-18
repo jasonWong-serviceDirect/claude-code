@@ -145,9 +145,52 @@ De-duplicate any findings that multiple reviewers flagged.
 4. Re-run review after fixes
 ```
 
-### 8.5 Diff Review Playground
-If playground skill is available, present the issues with suggested fixes in 
-a diff review playground
+### 8.5 Diff Review Playground (MANDATORY)
+
+**You MUST invoke the `playground` skill after presenting the report.** This is not optional. Use the Skill tool to invoke the `playground` skill with the diff-review template, passing all issues and their suggested fixes as arguments.
+
+#### Playground Requirements
+
+The playground must support an **interactive PR commenting workflow**:
+
+1. **Issue cards with Accept/Skip**: Each finding has Accept/Skip buttons in the sidebar.
+
+2. **Editable comment preview**: When a user accepts an issue, show an **editable textarea** pre-filled with a suggested review comment for that issue. The comment should be concise and actionable (e.g., "This sync is not wrapped in a transaction. If `syncLeadIfApplicable()` throws, the call attribute update is already committed while the lead column stays stale. Consider wrapping in `beginTransaction()`/`commit()`/`rollBack()`.").
+
+3. **Target line display**: Next to each editable comment, show the **file path and line number** where the comment will be posted on the PR. Pick the most relevant line from the diff (typically the first changed line related to the issue).
+
+4. **Diff toggle**: Toggle between "Current" and "Suggested" code views for issues that have a suggested fix.
+
+5. **Generate button**: A prominent "Generate PR Comments" button at the bottom of the prompt panel. When clicked, it generates a **copyable block of `gh api` commands** that will post all accepted (and potentially edited) comments as a PR review. Each comment body MUST include a GitHub suggestion block with the suggested fix code, so the PR author can click "Commit suggestion" directly in the GitHub UI to accept the change. The generated commands should use this pattern:
+
+```bash
+gh api repos/{owner}/{repo}/pulls/{pr_number}/reviews \
+  --method POST \
+  -f event="COMMENT" \
+  -f body="a few suggestions" \
+  -f 'comments[]={
+    "path": "Dao/CallAttribute.php",
+    "line": 37,
+    "body": "The comment explaining the issue.\n\n```suggestion\nthe suggested replacement code for that line\n```"
+  }' \
+  -f 'comments[]={...}'
+```
+
+The `body` field of the review MUST always be `"a few suggestions"` — never anything else. Each comment's `body` field must contain the review comment text followed by a GitHub `suggestion` code block with the corrected code. For multi-line suggestions, use the `start_line` field alongside `line` to specify the range.
+
+6. **Copy flow**: After clicking "Generate PR Comments", the commands appear in the prompt panel with a Copy button. The user copies them and pastes into Claude Code to execute. This is the bridge between the browser-based playground and the CLI.
+
+#### Data to pass to the playground skill
+
+When invoking the playground, include for each issue:
+- The **PR number**, repo owner, and repo name
+- The severity level and title
+- The **file path and diff line number** where the comment should land (include `start_line` if the suggestion spans multiple lines)
+- The current code (what the PR has now)
+- The **suggested fix code** (this is critical — it becomes the content of the GitHub `suggestion` block, allowing the PR author to click "Commit suggestion" to accept the fix)
+- A **pre-written review comment** (concise, 1-3 sentences explaining the issue — the suggestion block with the fix will be appended automatically)
+
+This step is critical because it transforms a wall-of-text review into an interactive tool where the user can curate, edit, and post review comments directly to the PR. Do NOT skip this step.
 
 ### 9. Shutdown Team
 
