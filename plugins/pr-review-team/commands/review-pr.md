@@ -145,6 +145,10 @@ De-duplicate any findings that multiple reviewers flagged.
 4. Re-run review after fixes
 ```
 
+### 8.5 Diff Review Playground
+If playground skill is available, present the issues with suggested fixes in 
+a diff review playground
+
 ### 9. Shutdown Team
 
 After presenting the report:
