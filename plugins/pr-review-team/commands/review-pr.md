@@ -161,22 +161,35 @@ The playground must support an **interactive PR commenting workflow**:
 
 4. **Diff toggle**: Toggle between "Current" and "Suggested" code views for issues that have a suggested fix.
 
-5. **Generate button**: A prominent "Generate PR Comments" button at the bottom of the prompt panel. When clicked, it generates a **copyable block of `gh api` commands** that will post all accepted (and potentially edited) comments as a PR review. Each comment body MUST include a GitHub suggestion block with the suggested fix code, so the PR author can click "Commit suggestion" directly in the GitHub UI to accept the change. The generated commands should use this pattern:
+5. **Generate button**: A prominent "Generate PR Comments" button at the bottom of the prompt panel. When clicked, it generates a **copyable `gh api` command using `--input` with a JSON heredoc** that will post all accepted (and potentially edited) comments as a PR review. Each comment body MUST include a GitHub suggestion block with the suggested fix code, so the PR author can click "Commit suggestion" directly in the GitHub UI to accept the change.
+
+**IMPORTANT**: Do NOT use `-f 'comments[]={...}'` — that format sends the JSON object as a string and GitHub silently drops the comments. Instead, use `--input -` with a heredoc to send a proper JSON body:
 
 ```bash
 gh api repos/{owner}/{repo}/pulls/{pr_number}/reviews \
   --method POST \
-  -f event="COMMENT" \
-  -f body="a few suggestions" \
-  -f 'comments[]={
-    "path": "Dao/CallAttribute.php",
-    "line": 37,
-    "body": "The comment explaining the issue.\n\n```suggestion\nthe suggested replacement code for that line\n```"
-  }' \
-  -f 'comments[]={...}'
+  --input - <<'EOF'
+{
+  "event": "COMMENT",
+  "body": "a few suggestions",
+  "comments": [
+    {
+      "path": "Dao/CallAttribute.php",
+      "line": 37,
+      "body": "The comment explaining the issue.\n\n```suggestion\nthe suggested replacement code for that line\n```"
+    },
+    {
+      "path": "Dao/CallAttribute.php",
+      "start_line": 56,
+      "line": 61,
+      "body": "Another comment.\n\n```suggestion\nsuggested code\n```"
+    }
+  ]
+}
+EOF
 ```
 
-The `body` field of the review MUST always be `"a few suggestions"` — never anything else. Each comment's `body` field must contain the review comment text followed by a GitHub `suggestion` code block with the corrected code. For multi-line suggestions, use the `start_line` field alongside `line` to specify the range.
+The `body` field of the review MUST always be `"a few suggestions"` — never anything else. Each comment's `body` field must contain the review comment text followed by a GitHub `suggestion` code block with the corrected code. For multi-line suggestions, use the `start_line` field alongside `line` to specify the range. All strings in the JSON must use `\n` for newlines (not literal newlines within string values).
 
 6. **Copy flow**: After clicking "Generate PR Comments", the commands appear in the prompt panel with a Copy button. The user copies them and pastes into Claude Code to execute. This is the bridge between the browser-based playground and the CLI.
 
