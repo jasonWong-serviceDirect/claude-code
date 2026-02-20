@@ -1,6 +1,6 @@
 {
   "name": "pr-review-team",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Team-based PR review using agent teams for parallel, coordinated code review across comments, tests, error handling, type design, code quality, best practices, and code simplification",
   "author": {
     "name": "Jason",
