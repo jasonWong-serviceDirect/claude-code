@@ -1,39 +1,29 @@
 # PR Review Team
 
-A team-based PR review plugin that uses Claude Code's **agent teams** feature to run specialized reviewers in parallel. Each reviewer is a persistent teammate with its own context, coordinating through a shared task list and inter-agent messaging.
+A PR review plugin that runs specialized reviewers as **parallel subagents**. Each reviewer is a short-lived subagent with its own context window that analyzes the diff from its perspective and returns its findings as its final result; the main instance aggregates everything into one report.
 
-## How It Differs from pr-review-toolkit
+## How It Works
 
-| Aspect | pr-review-toolkit (Subagents) | pr-review-team (Agent Teams) |
-|--------|-------------------------------|------------------------------|
-| **Execution** | Subagents launched sequentially or in parallel | Teammates run as persistent parallel workers |
-| **Coordination** | Main context aggregates results | Shared task list + direct messaging |
-| **Communication** | Results returned to caller | Teammates message the team lead |
-| **Lifecycle** | Short-lived, gone after task | Persistent until shutdown |
-| **Independence** | Subagent sees only its prompt | Each teammate has full independent context |
-| **Cost** | Lower (results summarized back) | Higher (each teammate is a separate instance) |
-
-**Use pr-review-team when:**
-- You want true parallel execution across all reviewers
-- You're reviewing a large PR that benefits from independent analysis
-- You want reviewers to work with their own full context window
-
-**Use pr-review-toolkit when:**
-- You want sequential, focused reviews
-- You're reviewing small changes
-- You want lower token cost
+| Aspect | Design |
+|--------|--------|
+| **Execution** | Reviewers launched as subagents in parallel (all in one response) |
+| **Coordination** | None needed - each reviewer works independently |
+| **Communication** | Each subagent's final result is its review report |
+| **Lifecycle** | Short-lived, gone after the review completes |
+| **Independence** | Each reviewer has its own context window |
+| **Cost** | Each reviewer is a separate Claude instance |
 
 ## Quick Start
 
 ```
-/pr-review-team:review-pr              # Full team review (all 8 reviewers)
+/pr-review-team:review-pr              # Full review (all 8 reviewers)
 /pr-review-team:review-pr tests errors # Only specific reviewers
 /pr-review-team:best-practices <question>  # Single-agent best practices research
 ```
 
 ## Review Agents (10 total)
 
-### Core Review Team (spawned by /review-pr)
+### Core Reviewers (spawned by /review-pr)
 
 | Agent | Focus | Model |
 |-------|-------|-------|
@@ -53,7 +43,7 @@ A team-based PR review plugin that uses Claude Code's **agent teams** feature to
 | **react-best-practices** | React performance anti-patterns | opus |
 | **web-design-guidelines** | UI/UX and accessibility | opus |
 
-## Team Architecture
+## Architecture
 
 When you run `/pr-review-team:review-pr`, here's what happens:
 
@@ -61,22 +51,12 @@ When you run `/pr-review-team:review-pr`, here's what happens:
 You (user)
   |
   v
-Team Lead (main Claude instance)
+Orchestrator (main Claude instance)
   |
-  |-- TeamCreate("pr-review")
-  |-- TaskCreate (one per review aspect)
-  |-- Task(team_name="pr-review") x N  (spawn teammates)
+  |-- git diff (determine scope)
+  |-- Agent(...) x N  (spawn reviewer subagents in parallel)
   |
   v
-┌──────────────────────────────────────────────────┐
-│                  Shared Task List                 │
-│  [ ] Code Review    [ ] Test Analysis            │
-│  [ ] Comment Check  [ ] Error Handling           │
-│  [ ] Type Design    [ ] Architecture Smells      │
-│  [ ] Best Practices [ ] Code Simplification      │
-└──────────────────────────────────────────────────┘
-  |          |          |          |          |
-  v          v          v          v          v
 ┌────┐   ┌────┐   ┌────┐   ┌────┐   ┌────┐
 │ R1 │   │ R2 │   │ R3 │   │ R4 │   │... │   (reviewers working in parallel)
 └────┘   └────┘   └────┘   └────┘   └────┘
@@ -84,27 +64,25 @@ Team Lead (main Claude instance)
   └──────────┴──────────┴──────────┴──────────┘
                         |
                         v
-              SendMessage (findings)
+          Subagent results (findings)
                         |
                         v
-                  Team Lead aggregates
+            Orchestrator aggregates
+          and verifies behavioral claims
                         |
                         v
                  PR Review Summary
-                        |
-                        v
-                  TeamDelete (cleanup)
 ```
 
 ## Usage Patterns
 
-### Full Team Review
+### Full Review
 
 ```
 /pr-review-team:review-pr
 ```
 
-Spawns all 8 core reviewers in parallel. Each reviewer independently analyzes the changed code from its perspective, then reports findings back to the team lead.
+Spawns all 8 core reviewers in parallel. Each reviewer independently analyzes the changed code from its perspective, then returns findings to the orchestrator.
 
 ### Targeted Review
 
@@ -120,7 +98,7 @@ Only spawns the requested reviewers. Faster and cheaper than a full review.
 /pr-review-team:best-practices Is this the right way to handle auth?
 ```
 
-Launches a single best-practices-analyzer agent (not a full team - overkill for one reviewer).
+Launches a single best-practices-analyzer agent.
 
 ### Individual Agent Use
 
@@ -180,12 +158,12 @@ All agents provide structured, actionable output:
 
 ## Tips
 
-- **Teams are parallel by nature**: All teammates start simultaneously
+- **Parallel by default**: All reviewers are spawned in one response and run simultaneously
 - **Token cost scales linearly**: 8 reviewers = ~8x the tokens of one reviewer. Target specific aspects when possible.
 - **Run early**: Before creating PR, not after
 - **Address critical first**: Agents prioritize findings by severity
 - **Iterate**: Run again after fixes to verify
-- **Individual agents are cheaper**: For a quick check on one aspect, use the agent directly instead of the team command
+- **Individual agents are cheaper**: For a quick check on one aspect, use the agent directly instead of the full review command
 
 ## License
 

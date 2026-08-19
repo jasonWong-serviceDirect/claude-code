@@ -1,12 +1,12 @@
 ---
-description: "Comprehensive PR review using an agent team with parallel reviewers"
+description: "Comprehensive PR review using parallel subagent reviewers"
 argument-hint: "[review-aspects]"
-allowed-tools: ["Bash", "Glob", "Grep", "Read", "Task", "TeamCreate", "TeamDelete", "TaskCreate", "TaskList", "TaskUpdate", "TaskGet", "SendMessage"]
+allowed-tools: ["Bash", "Glob", "Grep", "Read", "Task", "Agent"]
 ---
 
-# Team-Based PR Review
+# Subagent-Based PR Review
 
-Run a comprehensive pull request review using an **agent team** where specialized reviewers work as persistent teammates in parallel, coordinating through a shared task list and messaging.
+Run a comprehensive pull request review using **parallel subagents**, where each specialized reviewer runs independently and returns its findings as its final report.
 
 **Review Aspects (optional):** "$ARGUMENTS"
 
@@ -22,7 +22,7 @@ Run a comprehensive pull request review using an **agent team** where specialize
 
 ### 2. Available Review Aspects
 
-| Aspect | Teammate Name | Prompt File |
+| Aspect | Reviewer Name | Prompt File |
 |--------|--------------|------------|
 | `code` | code-reviewer | prompts/code-reviewer.md |
 | `tests` | test-analyzer | prompts/pr-test-analyzer.md |
@@ -34,81 +34,57 @@ Run a comprehensive pull request review using an **agent team** where specialize
 | `simplify` | code-simplifier | prompts/code-simplifier.md |
 | `all` | All of the above | (default) |
 
-### 3. Create the Review Team
+### 3. Spawn Reviewer Subagents
 
-Use TeamCreate:
-
-```
-TeamCreate(team_name="pr-review", description="Parallel PR review team")
-```
-
-### 4. Create Review Tasks
-
-For each applicable review aspect, create a task with TaskCreate. Each task should contain:
-
-- **subject**: Descriptive title (e.g., "Review code quality and project guidelines compliance")
-- **description**: Include the list of changed files and what the reviewer should focus on. Be specific about the scope.
-- **activeForm**: Present continuous form (e.g., "Reviewing code quality...")
-
-Create ALL tasks before spawning teammates so the task list is populated when teammates start.
-
-### 5. Spawn Reviewer Teammates
-
-For each review aspect, spawn a teammate using the Task tool with these parameters:
+For each applicable review aspect, spawn a subagent using the Agent tool (named Task in older builds) with these parameters:
 
 ```
-Task(
+Agent(
   subagent_type="general-purpose",
-  team_name="pr-review",
-  name="<teammate-name>",        // from the table above
-  model="opus",                   // for code-reviewer, arch-detector, practices-analyzer, code-simplifier, react-practices, web-guidelines
+  description="Review <aspect>",
+  model="opus",                   // for code-reviewer, arch-detector, practices-analyzer, code-simplifier
                                   // use "sonnet" for test-analyzer, comment-analyzer, failure-hunter, type-analyzer
   prompt="<composed prompt>"
 )
 ```
 
-**Composing teammate prompts:** For each teammate, build a prompt with these three sections:
+**Composing reviewer prompts:** For each reviewer, build a prompt with these three sections:
 
-**Section 1 - Expertise:** Read the corresponding prompt file from this plugin's `prompts/` directory (paths listed in the table above). Include the full expertise content (everything below the YAML frontmatter) as the teammate's domain knowledge.
+**Section 1 - Expertise:** Read the corresponding prompt file from this plugin's `prompts/` directory (paths listed in the table above). Include the full expertise content (everything below the YAML frontmatter) as the reviewer's domain knowledge.
 
 **Section 2 - Scope:** Include:
 - The list of changed files from git diff
 - The full diff content (or relevant portions for large diffs)
 - Any user-specified focus areas
 
-**Section 3 - Team Coordination:** Append these instructions to every teammate prompt:
+**Section 3 - Reporting Instructions:** Append these instructions to every reviewer prompt:
 
 ```
-## Team Workflow
+## Reporting
 
-You are a member of a PR review team. Follow this exact workflow:
+You are one reviewer in a parallel PR review. Perform your review, then return your findings as your final report.
 
-1. **Claim your task**: Use TaskList to find available tasks, then use TaskUpdate to set your task to in_progress with yourself as owner.
+1. **Perform your review**: Read the changed files, analyze the code according to your expertise, and compile your findings.
 
-2. **Perform your review**: Read the changed files, analyze the code according to your expertise, and compile your findings.
-
-3. **Report findings**: Send your complete review report to the team lead using SendMessage:
-   - type: "message"
-   - recipient: "<team-lead-name>"    (read from team config if needed)
-   - content: Your full structured review report
-   - summary: "N issues found: X critical, Y important"
-
-4. **Complete your task**: Use TaskUpdate to mark your task as completed.
+2. **Return your report**: Your final message IS your review report — it is collected and aggregated with the other reviewers' reports. Structure it as:
+   - A one-line summary: "N issues found: X critical, Y important"
+   - Findings grouped by severity (Critical / Important / Suggestions / Positive Observations)
+   - For each finding: file:line, description, why it matters, and a suggested fix
 
 IMPORTANT: Focus only on your area of expertise. Be thorough but filter aggressively - quality over quantity.
 ```
 
-**CRITICAL: Spawn ALL teammates in a single response** by making multiple parallel Task tool calls. This maximizes parallelism - all reviewers start simultaneously.
+**CRITICAL: Spawn ALL reviewer subagents in a single response** by making multiple parallel Agent tool calls. This maximizes parallelism - all reviewers start simultaneously.
 
-### 6. Monitor Progress
+### 4. Collect Results
 
-- Teammate messages are delivered automatically as they complete reviews
-- Use TaskList periodically to check overall progress if needed
-- If a teammate is taking too long or seems stuck, send them a message
+- Each subagent's final report is returned as its result when it completes
+- Wait for all reviewers to finish before aggregating
+- If a reviewer fails or returns an empty report, note it in the final summary rather than re-running the whole review
 
-### 7. Aggregate Results
+### 5. Aggregate Results
 
-After ALL teammates have reported their findings, aggregate into a unified report organized by severity:
+After ALL reviewers have returned their findings, aggregate into a candidate list organized by severity:
 
 - **Critical Issues** (must fix before merge) - across all reviewers
 - **Important Issues** (should fix) - across all reviewers
@@ -117,12 +93,31 @@ After ALL teammates have reported their findings, aggregate into a unified repor
 
 De-duplicate any findings that multiple reviewers flagged.
 
-### 8. Present the Report
+### 5.5. Verify Behavioral Claims
+
+Before presenting findings, verify every reviewer claim about **runtime behavior** by tracing the actual code. Reviewers frequently make claims like "this error is silent," "this renders in production," "no logging occurs," or "this value is never checked" — and these are often wrong because the reviewer only looked at the immediate code block without following the value through downstream calls.
+
+For each finding that asserts a behavioral outcome:
+
+1. **Read the actual code** at the cited location (not just the diff)
+2. **Trace the variable/value through ALL downstream function calls**, not just the block where the finding is located. For example, if a reviewer says "$amUserId being null is silent," follow $amUserId into every function it's passed to and check whether any of those functions log, throw, or alert.
+3. **Check both branches at every conditional** the value flows through
+4. **For "renders in production" claims**: verify what actually happens at runtime when the cited condition is met — don't conflate "code is in the bundle" with "code executes and produces visible output"
+5. **For "pre-existing vs introduced" claims**: check whether the behavior existed on the base branch before this PR
+
+Mark each finding as:
+- **Verified**: behavioral claim confirmed by tracing the code
+- **Invalidated**: behavioral claim is wrong (explain why — e.g., "the null value flows into updateHubspot() which logs a critical error at line 181")
+- **Pre-existing**: the behavior exists but was not introduced by this PR (reclassify from Critical/Important to "While you're here" suggestion)
+
+**Remove invalidated findings from the final report entirely.** Reclassify pre-existing findings as suggestions rather than critical/important issues. Only verified findings should appear in the severity-rated sections.
+
+### 6. Present the Report
 
 ```markdown
-# PR Review Summary (Team Review)
+# PR Review Summary (Subagent Review)
 
-## Reviewers: [list of teammates that participated]
+## Reviewers: [list of reviewers that participated]
 
 ## Critical Issues (X found)
 - **[reviewer-name]**: Issue description [`file:line`]
@@ -145,17 +140,9 @@ De-duplicate any findings that multiple reviewers flagged.
 4. Re-run review after fixes
 ```
 
-### 9. Shutdown Team
-
-After presenting the report:
-
-1. Send shutdown requests to ALL teammates using SendMessage with `type: "shutdown_request"`
-2. Wait for shutdown approvals
-3. Use TeamDelete to clean up the team
-
 ## Usage Examples
 
-**Full team review (default):**
+**Full review (default):**
 ```
 /pr-review-team:review-pr
 ```
@@ -163,32 +150,32 @@ After presenting the report:
 **Specific aspects:**
 ```
 /pr-review-team:review-pr tests errors
-# Only spawns test-analyzer and failure-hunter teammates
+# Only spawns test-analyzer and failure-hunter subagents
 
 /pr-review-team:review-pr architecture practices
-# Only spawns arch-detector and practices-analyzer teammates
+# Only spawns arch-detector and practices-analyzer subagents
 ```
 
 **All aspects:**
 ```
 /pr-review-team:review-pr all
-# Spawns all 8 reviewer teammates in parallel
+# Spawns all 8 reviewer subagents in parallel
 ```
 
 ## Tips
 
-- **Teams are parallel by default**: All teammates start simultaneously, no need to request parallel mode
+- **Parallel by default**: Spawn all reviewers in one response so they run simultaneously
 - **Run early**: Before creating PR, not after
-- **Focus on changes**: Teammates analyze git diff by default
+- **Focus on changes**: Reviewers analyze git diff by default
 - **Address critical first**: Fix high-priority issues before lower priority
 - **Re-run after fixes**: Verify issues are resolved
-- **Use specific aspects**: Target specific reviewers when you know the concern - spawning fewer teammates is faster and cheaper
-- **Token cost**: Each teammate is a separate Claude instance. Using `all` spawns 8 instances. Target specific aspects when possible to reduce cost.
+- **Use specific aspects**: Target specific reviewers when you know the concern - spawning fewer subagents is faster and cheaper
+- **Token cost**: Each subagent is a separate Claude instance. Using `all` spawns 8 instances. Target specific aspects when possible to reduce cost.
 
 ## Notes
 
-- Each teammate works independently with its own context window
-- Teammates report findings via direct messages to the team lead
-- The team lead (you) synthesizes all findings into a unified report
+- Each reviewer works independently with its own context window
+- Reviewers report findings via their final subagent result - no messaging or shared task list involved
+- The orchestrator (you) synthesizes all findings into a unified report
 - Expertise files in `prompts/` are only loaded when this command is invoked, keeping context free in other conversations
-- Team coordination adds some overhead vs subagents - use this when you want parallel execution and the ability for reviewers to work independently
+- Subagents are simpler and lower-overhead than agent teams; the trade-off is no mid-review coordination between reviewers, which this workflow doesn't need
