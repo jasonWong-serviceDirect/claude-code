@@ -14,11 +14,23 @@ Run a comprehensive pull request review using **parallel subagents**, where each
 
 ### 1. Determine Review Scope
 
-- Run `git diff --name-only` to identify changed files
-- Run `git diff` to get the full diff content
-- Parse arguments to see if user requested specific review aspects
-- Check if a PR already exists: `gh pr view`
-- Default: Run all applicable reviews
+The review covers everything the branch changes: its commits (pushed and unpushed) plus uncommitted work. A bare `git diff` shows only uncommitted changes, so it misses every committed change. Do not use it alone.
+
+1. Find the base branch. If a PR exists, use its base: `gh pr view --json baseRefName -q .baseRefName`. Otherwise use the default branch: `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`.
+2. Fetch the base and find the merge base:
+   ```bash
+   git fetch origin <base>
+   MB=$(git merge-base origin/<base> HEAD)
+   ```
+3. Get the changes. `git diff $MB` compares the merge base with the working tree, so one diff holds the branch's commits and the uncommitted changes to tracked files:
+   ```bash
+   git diff --name-only $MB
+   git diff $MB
+   git ls-files --others --exclude-standard   # new untracked files: read them too
+   ```
+4. If the diff and the untracked list are both empty, say there is nothing to review and stop.
+5. Parse arguments to see if the user requested specific review aspects. Default: run all applicable reviews.
+6. In the report, name the base branch and say whether uncommitted changes were included.
 
 ### 2. Available Review Aspects
 
@@ -53,8 +65,9 @@ Agent(
 **Section 1 - Expertise:** Read the corresponding prompt file from this plugin's `prompts/` directory (paths listed in the table above). Include the full expertise content (everything below the YAML frontmatter) as the reviewer's domain knowledge.
 
 **Section 2 - Scope:** Include:
-- The list of changed files from git diff
-- The full diff content (or relevant portions for large diffs)
+- The list of changed files from `git diff --name-only $MB`, plus new untracked files
+- The full diff content from `git diff $MB` (or relevant portions for large diffs)
+- The merge-base SHA, so the reviewer can re-run the diff itself
 - Any user-specified focus areas
 
 **Section 3 - Reporting Instructions:** Append these instructions to every reviewer prompt:
@@ -166,7 +179,7 @@ Mark each finding as:
 
 - **Parallel by default**: Spawn all reviewers in one response so they run simultaneously
 - **Run early**: Before creating PR, not after
-- **Focus on changes**: Reviewers analyze git diff by default
+- **Focus on changes**: Reviewers analyze the diff from the merge base, covering committed and uncommitted work
 - **Address critical first**: Fix high-priority issues before lower priority
 - **Re-run after fixes**: Verify issues are resolved
 - **Use specific aspects**: Target specific reviewers when you know the concern - spawning fewer subagents is faster and cheaper
