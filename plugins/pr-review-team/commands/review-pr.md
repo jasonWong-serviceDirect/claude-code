@@ -1,14 +1,14 @@
 ---
-description: "Comprehensive PR review using parallel subagent reviewers"
-argument-hint: "[review-aspects]"
-allowed-tools: ["Bash", "Glob", "Grep", "Read", "Task", "Agent"]
+description: "Comprehensive PR review using parallel subagent reviewers plus Claude Code's built-in bug review"
+argument-hint: "[review-aspects] [low|medium|high|xhigh]"
+allowed-tools: ["Bash", "Glob", "Grep", "Read", "Task", "Agent", "Skill"]
 ---
 
 # Subagent-Based PR Review
 
-Run a comprehensive pull request review using **parallel subagents**, where each specialized reviewer runs independently and returns its findings as its final report.
+Run a comprehensive pull request review using **parallel subagents**, where each specialized reviewer runs independently and returns its findings as its final report. Correctness bugs are handed to Claude Code's built-in `/code-review`, which hunts bugs with its own finders (and, at most effort levels, verifiers). The reviewers in this plugin add topics `/code-review` does not cover in depth: tests, comments, error handling, types, architecture, best practices, and simplification. Some overlap is expected (`/code-review` also checks CLAUDE.md rules and some cleanups); step 5 de-duplicates it.
 
-**Review Aspects (optional):** "$ARGUMENTS"
+**Arguments (optional):** "$ARGUMENTS"
 
 ## Review Workflow
 
@@ -29,13 +29,14 @@ The review covers everything the branch changes: its commits (pushed and unpushe
    git ls-files --others --exclude-standard   # new untracked files: read them too
    ```
 4. If the diff and the untracked list are both empty, say there is nothing to review and stop.
-5. Parse arguments to see if the user requested specific review aspects. Default: run all applicable reviews.
+5. Parse the arguments: review aspects (table below) and an optional effort level for `bugs` (`low`, `medium`, `high` or `xhigh`). Default: all aspects, and effort `medium` for `bugs` (with no level, `/code-review` would reuse whatever level was typed last in the session, so its cost would change from run to run). Never pass `max` or `ultra` unless the user typed it.
 6. In the report, name the base branch and say whether uncommitted changes were included.
 
 ### 2. Available Review Aspects
 
-| Aspect | Reviewer Name | Prompt File |
+| Aspect | Reviewer Name | How it runs |
 |--------|--------------|------------|
+| `bugs` | code-review | Built-in `/code-review` skill (step 3b) |
 | `code` | code-reviewer | prompts/code-reviewer.md |
 | `tests` | test-analyzer | prompts/pr-test-analyzer.md |
 | `comments` | comment-analyzer | prompts/comment-analyzer.md |
@@ -48,7 +49,7 @@ The review covers everything the branch changes: its commits (pushed and unpushe
 
 ### 3. Spawn Reviewer Subagents
 
-For each applicable review aspect, spawn a subagent using the Agent tool (named Task in older builds) with these parameters:
+For each applicable aspect except `bugs`, spawn a subagent using the Agent tool (named Task in older builds) with these parameters:
 
 ```
 Agent(
@@ -69,89 +70,110 @@ Agent(
 - The full diff content from `git diff $MB` (or relevant portions for large diffs)
 - The merge-base SHA, so the reviewer can re-run the diff itself
 - Any user-specified focus areas
+- For code-reviewer only, when the `bugs` aspect also runs: "Correctness bugs are covered by a separate bug review. Skip Bug Detection and focus on Project Guidelines Compliance and Code Quality."
 
 **Section 3 - Reporting Instructions:** Append these instructions to every reviewer prompt:
 
 ```
 ## Reporting
 
-You are one reviewer in a parallel PR review. Perform your review, then return your findings as your final report.
+You are one reviewer in a parallel PR review. Perform your review, then return your findings as your final report. Your final message IS your report: it is collected and aggregated with the other reviewers' reports.
 
-1. **Perform your review**: Read the changed files, analyze the code according to your expertise, and compile your findings.
+What to report:
+- Report every finding you can back with a concrete failure scenario (the inputs or state that trigger it and the wrong result), or, for a cleanup finding, a concrete cost (what is duplicated, wasted, or harder to maintain, or which CLAUDE.md rule it breaks).
+- Do not drop a finding because you are unsure of it. The orchestrator verifies every finding against the code. This rule overrides any confidence cutoff or "filter aggressively" instruction in your expertise section: findings that reviewers silently drop are the main cause of missed bugs.
+- Do not pad. A finding with no concrete failure scenario or cost does not belong in the report.
+- If the same mistake appears in several places, report it once and list the other places.
 
-2. **Return your report**: Your final message IS your review report — it is collected and aggregated with the other reviewers' reports. Structure it as:
-   - A one-line summary: "N issues found: X critical, Y important"
-   - Findings grouped by severity (Critical / Important / Suggestions / Positive Observations)
-   - For each finding: file:line, description, why it matters, and a suggested fix
+For each finding give:
+- `file:line`
+- severity, one of:
+  - `important`: a problem this change adds or makes worse that should be fixed before merging. A rare trigger does not lower the severity.
+  - `pre_existing`: a problem in the codebase that this change did not introduce. If the change re-exposes it, it is `important`.
+  - `nit`: worth fixing but not blocking, for example a broken CLAUDE.md rule or a problem that harms nobody.
+- summary: two or three short sentences. Start with the problem as a user of the code would see it, then where it happens and what sets it off, then "Fix:" and the change to make.
+- failure scenario or cost, as described above.
 
-IMPORTANT: Focus only on your area of expertise. Be thorough but filter aggressively - quality over quantity.
+Start the report with a one-line count ("N findings: X important, Y pre_existing, Z nit"). End with a short list of positive observations, if any.
+
+Focus only on your area of expertise.
 ```
 
 **CRITICAL: Spawn ALL reviewer subagents in a single response** by making multiple parallel Agent tool calls. This maximizes parallelism - all reviewers start simultaneously.
 
+### 3b. Run the Built-in Bug Review (`bugs` aspect)
+
+After the subagents are spawned, invoke the built-in skill with the Skill tool: `skill: "code-review"`, `args: "<effort> origin/<base>...HEAD plus uncommitted changes"`, where `<effort>` is the level from step 1 (`medium` by default). Keep the words "plus uncommitted changes": without them `/code-review` skips work the user has not committed.
+
+- Follow the instructions the skill loads. It runs in this context while the subagents work; if your Agent calls block until they finish, it simply runs after them.
+- If the skill that loads is not Claude Code's built-in bug review (for example, a personal or project skill named `code-review` that does a Standards/Spec review), do not follow it. Note in the report that the `bugs` aspect did not run and why, and continue.
+- If `/code-review` reports its findings with the ReportFindings tool, that is fine. Also carry every finding into step 5 with reviewer name `code-review`. The report in step 6 is still the final output of this command.
+- Do not apply fixes, post comments, or run any follow-up skill that `/code-review` suggests after its review. Continue with step 4.
+
 ### 4. Collect Results
 
 - Each subagent's final report is returned as its result when it completes
-- Wait for all reviewers to finish before aggregating
+- Wait for all reviewers and the `/code-review` pass to finish before aggregating
 - If a reviewer fails or returns an empty report, note it in the final summary rather than re-running the whole review
 
 ### 5. Aggregate Results
 
-After ALL reviewers have returned their findings, aggregate into a candidate list organized by severity:
+After ALL reviewers have returned their findings, combine them into one candidate list. De-duplicate findings that several reviewers flagged (same defect, same location, same reason): keep the one with the most concrete failure scenario and list every reviewer that raised it. If the same mistake appears in several places, keep one finding and name the other places in it.
 
-- **Critical Issues** (must fix before merge) - across all reviewers
-- **Important Issues** (should fix) - across all reviewers
-- **Suggestions** (nice to have) - across all reviewers
-- **Positive Observations** (what's good) - across all reviewers
+### 5.5. Verify Findings
 
-De-duplicate any findings that multiple reviewers flagged.
+Before presenting findings, verify each one by reading the actual code. Reviewers often make claims like "this error is silent," "this renders in production," "no logging occurs," or "this value is never checked," and these are often wrong because the reviewer only looked at the immediate code block without following the value through downstream calls.
 
-### 5.5. Verify Behavioral Claims
+A `/code-review` finding that already carries a CONFIRMED or PLAUSIBLE verdict passed that skill's own verifier: do not verify it again, only de-duplicate it. `/code-review` does not always run a verifier (it depends on the effort level and on whether subagents are available), so a `/code-review` finding with no verdict is checked like any other.
 
-Before presenting findings, verify every reviewer claim about **runtime behavior** by tracing the actual code. Reviewers frequently make claims like "this error is silent," "this renders in production," "no logging occurs," or "this value is never checked" — and these are often wrong because the reviewer only looked at the immediate code block without following the value through downstream calls.
-
-For each finding that asserts a behavioral outcome:
+For every finding that needs checking:
 
 1. **Read the actual code** at the cited location (not just the diff)
 2. **Trace the variable/value through ALL downstream function calls**, not just the block where the finding is located. For example, if a reviewer says "$amUserId being null is silent," follow $amUserId into every function it's passed to and check whether any of those functions log, throw, or alert.
 3. **Check both branches at every conditional** the value flows through
-4. **For "renders in production" claims**: verify what actually happens at runtime when the cited condition is met — don't conflate "code is in the bundle" with "code executes and produces visible output"
-5. **For "pre-existing vs introduced" claims**: check whether the behavior existed on the base branch before this PR
+4. **For "renders in production" claims**: verify what actually happens at runtime when the cited condition is met. Do not conflate "code is in the bundle" with "code executes and produces visible output"
+5. **For "pre-existing vs introduced" claims**: check whether the behavior existed on the base branch before this PR, and set the severity to `pre_existing` or `important` to match
 
-Mark each finding as:
-- **Verified**: behavioral claim confirmed by tracing the code
-- **Invalidated**: behavioral claim is wrong (explain why — e.g., "the null value flows into updateHubspot() which logs a critical error at line 181")
-- **Pre-existing**: the behavior exists but was not introduced by this PR (reclassify from Critical/Important to "While you're here" suggestion)
+Give each finding one verdict:
+- **CONFIRMED**: you can name the inputs or state that trigger it and the wrong result. Quote the line.
+- **PLAUSIBLE**: the mechanism is real but the trigger is uncertain (timing, environment, configuration). State what would confirm it.
+- **REFUTED**: the claim is factually wrong (quote the line that shows it), provably impossible (a type, constant or invariant prevents it), already handled (cite the guard), or pure style with no observable effect.
 
-**Remove invalidated findings from the final report entirely.** Reclassify pre-existing findings as suggestions rather than critical/important issues. Only verified findings should appear in the severity-rated sections.
+PLAUSIBLE is the default. Do not refute a finding for being "speculative" or "depending on runtime state" when the state is realistic: a race, a null on a rare but reachable path (error handler, cold cache, missing optional field), a falsy zero treated as missing, an off-by-one on a boundary the code does not exclude, a partial failure or retry, an allowlist or regex that lost an anchor.
+
+**Remove REFUTED findings from the report**, and give their count in one line. Keep CONFIRMED and PLAUSIBLE findings. A severity only labels and orders a finding: never drop a finding because of its severity.
 
 ### 6. Present the Report
 
 ```markdown
 # PR Review Summary (Subagent Review)
 
-## Reviewers: [list of reviewers that participated]
+Base: `<base>` (merge base `<short sha>`); uncommitted changes: included / none
+Reviewers: [list of reviewers that ran, and any that failed or were skipped, with why]
 
-## Critical Issues (X found)
-- **[reviewer-name]**: Issue description [`file:line`]
-  - Why: explanation
-  - Fix: suggestion
+## Important (X found)
+- **[reviewer-name]** CONFIRMED|PLAUSIBLE: summary [`file:line`]
+  - Failure scenario: inputs or state → wrong result
+  - Fix: the change to make
 
-## Important Issues (X found)
-- **[reviewer-name]**: Issue description [`file:line`]
+## Pre-existing (X found)
+- **[reviewer-name]** CONFIRMED|PLAUSIBLE: summary [`file:line`]
+  - Fix: the change to make
 
-## Suggestions (X found)
-- **[reviewer-name]**: Suggestion [`file:line`]
+## Nits (X found)
+- **[reviewer-name]**: summary [`file:line`]
+
+Refuted and removed: N findings
 
 ## Strengths
 - What's well-done in this PR (from all reviewers)
 
 ## Recommended Action
-1. Fix critical issues first
-2. Address important issues
-3. Consider suggestions
-4. Re-run review after fixes
+1. One step per finding to fix, important ones first, each naming its `file:line` and the fix
+2. Then any pre-existing findings or nits worth fixing in this PR
 ```
+
+Write each Recommended Action step so that it names a specific finding: `/pr-suggest-fixes` turns these steps into PR comments.
 
 ## Usage Examples
 
@@ -165,14 +187,14 @@ Mark each finding as:
 /pr-review-team:review-pr tests errors
 # Only spawns test-analyzer and failure-hunter subagents
 
-/pr-review-team:review-pr architecture practices
-# Only spawns arch-detector and practices-analyzer subagents
+/pr-review-team:review-pr bugs high
+# Only runs the built-in /code-review at high effort
 ```
 
 **All aspects:**
 ```
 /pr-review-team:review-pr all
-# Spawns all 8 reviewer subagents in parallel
+# Spawns all 8 reviewer subagents in parallel and runs /code-review
 ```
 
 ## Tips
@@ -180,10 +202,10 @@ Mark each finding as:
 - **Parallel by default**: Spawn all reviewers in one response so they run simultaneously
 - **Run early**: Before creating PR, not after
 - **Focus on changes**: Reviewers analyze the diff from the merge base, covering committed and uncommitted work
-- **Address critical first**: Fix high-priority issues before lower priority
+- **Address important first**: Fix findings that this change adds before pre-existing ones and nits
 - **Re-run after fixes**: Verify issues are resolved
 - **Use specific aspects**: Target specific reviewers when you know the concern - spawning fewer subagents is faster and cheaper
-- **Token cost**: Each subagent is a separate Claude instance. Using `all` spawns 8 instances. Target specific aspects when possible to reduce cost.
+- **Token cost**: Each subagent is a separate Claude instance. Using `all` spawns 8 instances, and `/code-review` starts its own finder and verifier subagents at medium effort and above. Target specific aspects when possible to reduce cost.
 
 ## Notes
 
@@ -192,3 +214,4 @@ Mark each finding as:
 - The orchestrator (you) synthesizes all findings into a unified report
 - Expertise files in `prompts/` are only loaded when this command is invoked, keeping context free in other conversations
 - Subagents are simpler and lower-overhead than agent teams; the trade-off is no mid-review coordination between reviewers, which this workflow doesn't need
+- `/ship` also runs the built-in `/code-review`. A personal or project skill named `code-review` replaces the built-in one and stops both this command's `bugs` aspect and `/ship`'s review

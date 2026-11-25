@@ -16,7 +16,7 @@ A PR review plugin that runs specialized reviewers as **parallel subagents**. Ea
 ## Quick Start
 
 ```
-/pr-review-team:review-pr              # Full review (all 8 reviewers)
+/pr-review-team:review-pr              # Full review (8 reviewers + built-in /code-review)
 /pr-review-team:review-pr tests errors # Only specific reviewers
 /pr-review-team:best-practices <question>  # Single-agent best practices research
 ```
@@ -27,6 +27,7 @@ A PR review plugin that runs specialized reviewers as **parallel subagents**. Ea
 
 | Agent | Focus | Model |
 |-------|-------|-------|
+| **code-review** (`bugs`) | Correctness bugs, via Claude Code's built-in `/code-review` skill | built-in |
 | **code-reviewer** | Project guidelines, bugs, code quality | opus |
 | **pr-test-analyzer** | Test coverage quality and completeness | inherit |
 | **comment-analyzer** | Comment accuracy and maintainability | inherit |
@@ -113,11 +114,13 @@ All agents are also available as standalone subagents, triggered automatically b
 
 ## Agent Details
 
+The review command asks every reviewer to report with one shared severity scale (`important`, `pre_existing`, `nit`) and to drop no finding for being uncertain; the orchestrator then marks each finding CONFIRMED, PLAUSIBLE or REFUTED and removes the refuted ones. The scales below are what each prompt uses when run on its own.
+
 ### Confidence and Scoring
 
 | Agent | Scoring Method |
 |-------|---------------|
-| code-reviewer | 0-100 confidence (reports >= 80) |
+| code-reviewer | important / pre_existing / nit, no confidence cutoff |
 | pr-test-analyzer | 1-10 criticality rating |
 | comment-analyzer | Issue categorization (Critical/Improvement/Removal) |
 | silent-failure-hunter | CRITICAL/HIGH/MEDIUM severity |
@@ -143,7 +146,7 @@ All agents provide structured, actionable output:
 ```
 1. Write code
 2. Run: /pr-review-team:review-pr code errors
-3. Fix any critical issues
+3. Fix any important findings
 4. Commit
 ```
 
@@ -151,7 +154,7 @@ All agents provide structured, actionable output:
 ```
 1. Stage all changes
 2. Run: /pr-review-team:review-pr all
-3. Address all critical and important issues
+3. Address all important findings
 4. Run targeted reviews again to verify
 5. Create PR
 ```
@@ -161,7 +164,7 @@ All agents provide structured, actionable output:
 - **Parallel by default**: All reviewers are spawned in one response and run simultaneously
 - **Token cost scales linearly**: 8 reviewers = ~8x the tokens of one reviewer. Target specific aspects when possible.
 - **Run early**: Before creating PR, not after
-- **Address critical first**: Agents prioritize findings by severity
+- **Address important first**: The report orders findings important, then pre_existing, then nit
 - **Iterate**: Run again after fixes to verify
 - **Individual agents are cheaper**: For a quick check on one aspect, use the agent directly instead of the full review command
 
